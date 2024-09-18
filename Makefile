@@ -1,17 +1,19 @@
 # Makefile to build class 'hidio' for Pure Data.
 # Needs Makefile.pdlibbuilder as helper makefile for platform-dependent build
 # settings and rules.
+# Martin Peach this is where we keep pd today:
+#PDINCLUDEDIR=/c/Users/martin/Documents/pd-0.50-2/src
 
 # Mingw
-#HOMEPATHMOUNT=/c
+#PDINCLUDEDIR=/c/Users/RBees/Documents/pd-0.50-2/src
+#cflags = -DMingw
 
 # WSL
 # enable to build under WSL
-HOMEPATHMOUNT=/mnt/c
 system = Windows
-cflags = -I ~/dev/xwin/sdk/include
+cflags = -DWSL -I ~/dev/xwin/sdk/include
 CC = x86_64-w64-mingw32-gcc
-
+HOMEPATHMOUNT=/mnt/c
 HOMEPATH=$(HOMEPATHMOUNT)/Users/RBees
 APPDATA=$(HOMEPATH)/AppData/Roaming
 ProgramFiles=$(HOMEPATHMOUNT)/Program\ Files
@@ -36,6 +38,8 @@ ldlibs = -lhid -lsetupapi
 PDLIBBUILDER_DIR=pd-lib-builder/
 include $(PDLIBBUILDER_DIR)/Makefile.pdlibbuilder
 
+# used so that `make list` shows a list of make targets
+# useful for debugging
 .PHONY: list
 list:
 	@LC_ALL=C $(MAKE) -pRrq -f $(firstword $(MAKEFILE_LIST)) : 2>/dev/null | awk -v RS= -F: '/(^|\n)# Files(\n|$$)/,/(^|\n)# Finished Make data base/ {if ($$1 !~ "^[#.]") {print $$1}}' | sort | grep -E -v -e '^[^[:alnum:]]' -e '^$@$$'

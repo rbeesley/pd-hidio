@@ -5,7 +5,7 @@
  *  Copyright (c) 2006 Olaf Matthes. All rights reserved.
  *
  *  Modified 2020 by Martin Peach <chakekatzil@gmail.com> to run on pd-0.50.0, build using Msys64.
- * 
+ *
  *  Modified 2024 by Ryan Beesley <pd+hidio@beesley.name> to support get_device_number_by_id and other calls supported by Linux and MacOS.
  *
  *   This program is free software; you can redistribute it and/or modify
@@ -27,10 +27,16 @@
 
 #include <windows.h>
 #include <winbase.h>
-#include <winerror.h> 
+#ifdef WSL
+#include <winerror.h>
+#else
+#include <WinError.h>
+#endif 
 #include <stdio.h>
+#ifdef WSL
 #include <initguid.h>
 #include <usbiodef.h>
+#endif
 #include <setupapi.h> 
 
 /*
@@ -236,10 +242,8 @@ short _hid_count_devices(void)
 	char	DeviceName[MAXPDSTRING];
 
 	/* Search in Windows Registry for enumerated HID devices */
-	debug_post(LOG_INFO, "Search in Windows Registry for enumerated HID devices");
     if ((ret = RegOpenKeyEx(HKEY_LOCAL_MACHINE, "SYSTEM\\CurrentControlSet\\Services\\HidUsb\\Enum", 0, KEY_QUERY_VALUE, &hKey)) != ERROR_SUCCESS)
 	{
-		debug_post(LOG_ERR, "hidio: failed to get list of HID devices from registry");
 		error("hidio: failed to get list of HID devices from registry");
         return EXIT_FAILURE;
     }
@@ -248,7 +252,6 @@ short _hid_count_devices(void)
 	{
         DeviceNameLen = 80;
         KeyNameLen = 100;
-		debug_post(LOG_DEBUG, "#%i - KeyName: %s, DeviceName: %s", i, KeyName, DeviceName);
 		ret = RegEnumValue(hKey, i, KeyName, &KeyNameLen, NULL, NULL, (unsigned char*)DeviceName, &DeviceNameLen);
         if (ret == ERROR_SUCCESS)
 		{
@@ -260,14 +263,13 @@ short _hid_count_devices(void)
 			else if (!strncmp(DeviceName, "USB\\VID", 7))
 			{
 				/* we found a device, DeviceName contains the path */
-				debug_post(LOG_INFO, "device #%d: %s = %s", gNumDevices, KeyName, DeviceName);
+				// post("device #%d: %s = %s", gNumDevices, KeyName, DeviceName);
 				gNumDevices++;
 				continue;
 			}
 		}
 		else if (ret == ERROR_NO_MORE_ITEMS)	/* no more entries in registry */
 		{
-			debug_post(LOG_ERR, "No more entries in registry");
 			break;
 		}
 		else	/* any other error while looking into registry */
@@ -275,14 +277,11 @@ short _hid_count_devices(void)
 			char errbuf[MAXPDSTRING];
 			FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, ret, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
 							errbuf, MAXPDSTRING, NULL);
-			debug_post(LOG_ERR, "hidio: %s", errbuf);
 			error("hidio: %s", errbuf);
 			break;
 		}
 	}
-	debug_post(LOG_DEBUG, "Closing Registry Key");
 	RegCloseKey(hKey);
-	debug_post(LOG_DEBUG, "Returning that there are %i devices", gNumDevices);
     return gNumDevices;		/* return number of devices */
 }
 
@@ -362,40 +361,28 @@ short get_device_number_by_id(unsigned short vendor_id, unsigned short product_i
 	short ret, i;
 	//short device_count = _hid_count_devices(); // mp20200205 doesn't set global
     device_count = _hid_count_devices(); // mp20200205 set global
-	debug_post(LOG_DEBUG, "Enumerating %i devices", device_count);
 	for (i = 0; i < device_count; i++)
 	{
-		debug_post(LOG_DEBUG, "Device #%i", i);
 		/* get path for specified device number */
 		ret = _hid_get_device_path(i, &pp, MAX_PATH);
 		if (ret == -1)
 		{
-			debug_post(LOG_ERR, "Could not get device path for device #%i", i);
 			return EXIT_FAILURE;
 		}
 		else
 		{
 			DWORD vid, pid;
-			debug_post(LOG_INFO, "Scanning: %s ", pp);
-			debug_post(LOG_INFO, "     for: \\\\?\\hid#vid_%04X&pid_%04X#", &vid, &pid);
-			sscanf_s(pp, "\\\\?\\hid#vid_%04X&pid_%04X#", &vid, &pid); // grab the vid and pid of the device
+				sscanf_s(pp, "\\\\?\\hid#vid_%04X&pid_%04X#", &vid, &pid); // grab the vid and pid of the device
 
-			debug_post(LOG_INFO,"compare 0x%04x == 0x%04x  0x%04x == 0x%04x",
-				vid,
-				vendor_id,
-				pid,
-				product_id);
 			if(vid != vendor_id || pid != product_id)
 			{
 				continue;
 			}
 
-			debug_post(LOG_INFO, "Found device 0x%04X 0x%04X", vendor_id, product_id);
 			return i;
 		}
 	}
 	
-	debug_post(LOG_WARNING, "Failed to find device 0x%04X 0x%04X", vendor_id, product_id);
 	return EXIT_FAILURE;
 }
 

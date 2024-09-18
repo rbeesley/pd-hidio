@@ -1,0 +1,6 @@
+{
+    "C_Cpp.default.defines": [
+        "_WIN32",
+        "PD"
+    ]
+}

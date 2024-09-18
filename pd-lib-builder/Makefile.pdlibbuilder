@@ -1,5 +1,11 @@
 # Makefile.pdlibbuilder dated 2024-09-17
-version = 0.5.2-rmb
+version = 0.5.1-rmb
+
+ifdef WSL_DISTRO_NAME
+  ### Update which works with WSL
+else
+  ### Original which works with Mingw
+endif
 
 # Helper makefile for Pure Data external libraries.
 # Written by Katja Vetter March-June 2015 for the public domain. No warranties.
@@ -588,35 +594,18 @@ endif
 
 
 #=== flags and paths for Windows ===============================================
+
+
 # Standard paths on Windows contain spaces, and GNU make functions treat such
 # paths as lists, with unintended effects. Therefore we must use shell function
 # ls instead of make's wildcard when probing for a path, and use double quotes
 # when specifying a path in a command argument.
 
-# Assume that if WSLENV isn't defined that we're running Mingw
-ifndef WSLENV
-  #=== flags and paths for Mingw ===============================================
-
-  # Default paths in Mingw / Mingw-w64 environments. 'PROGRAMFILES' is standard
-  # location for builds with native architecture, 'ProgramFiles(x86)' for i686
-  # builds on x86_64 Windows (detection method by Lucas Cordiviola). Curly braces
-  # required because of parentheses in variable name.
-  ifeq ($(system), Windows)
-    pkglibdir := $(APPDATA)/Pd
-    ifeq ($(MINGW_CHOST), i686-w64-mingw32)
-      programfiles := ${ProgramFiles(x86)}
-    else
-      programfiles := $(PROGRAMFILES)
-    endif
-    pdbinpath := $(programfiles)/Pd/bin
-    pdincludepath := $(programfiles)/Pd/src
-  endif
-
-else
-
+ifdef WSL_DISTRO_NAME
   #=== flags and paths for WSL =================================================
+
   # Default paths in WSL environments.
-#  ifeq ($(system), Windows)
+  ifeq ($(system), Windows)
 #    pkglibdir := $(APPDATA)/Pd
 #    ifeq ($(HOSTTYPE), x86_64)
 #      programfiles := $(ProgramFiles)
@@ -625,7 +614,24 @@ else
 #    endif
 #    pdbinpath := $(programfiles)/Pd/bin
 #    pdincludepath := $(programfiles)/Pd/src
-#  endif
+  endif
+else
+  #=== flags and paths for Mingw ===============================================
+
+# Default paths in Mingw / Mingw-w64 environments. 'PROGRAMFILES' is standard
+# location for builds with native architecture, 'ProgramFiles(x86)' for i686
+# builds on x86_64 Windows (detection method by Lucas Cordiviola). Curly braces
+# required because of parentheses in variable name.
+ifeq ($(system), Windows)
+  pkglibdir := $(APPDATA)/Pd
+  ifeq ($(MINGW_CHOST), i686-w64-mingw32)
+    programfiles := ${ProgramFiles(x86)}
+  else
+    programfiles := $(PROGRAMFILES)
+  endif
+  pdbinpath := $(programfiles)/Pd/bin
+  pdincludepath := $(programfiles)/Pd/src
+endif
 
 endif
 
@@ -633,25 +639,30 @@ endif
 # For include path this is done in the platform-independent paths section below,
 # but for PDBINDIR it is done here so ld flags can be evaluated as immediate
 # variables.
-ifeq ($(system), Windows)
-  $(info ++++ info: PDDIR : $(PDDIR))
-  $(info ++++ info: PDINCLUDEDIR : $(PDINCLUDEDIR))
-  $(info ++++ info: PDBINDIR : $(PDBINDIR))
-  $(info ++++ info: PDLIBDIR : $(PDLIBDIR))
 
-  ifndef PDBINDIR
-#    ifdef PDDIR
-#      PDBINDIR := $(wildcard $(PDDIR)/bin)
-#    endif
-    PDBINDIR ?= $(pdbinpath)
+ifdef WSL_DISTRO_NAME
+  ifeq ($(system), Windows)
+    ifndef PDBINDIR
+  #    ifdef PDDIR
+  #      PDBINDIR := $(wildcard $(PDDIR)/bin)
+  #    endif
+      PDBINDIR ?= $(pdbinpath)
+      endif
+  endif
+else
+  ifeq ($(system), Windows)
+    ifdef PDDIR
+      PDBINDIR := $(PDDIR)/bin
     endif
+    PDBINDIR ?= $(pdbinpath)
+  endif
 endif
 
 # TODO: decide whether -mms-bitfields should be specified.
 ifeq ($(system), Windows)
   cpp.flags := -DMSW -DNT
   ifeq ($(filter i%86 mingw32, $(target.arch)), $(target.arch))
-    arch.c.flags := -march=pentium4 -msse -msse2 -mfpmath=sse
+     arch.c.flags := -march=pentium4 -msse -msse2 -mfpmath=sse
   else ifeq (x86_64, $(target.arch))
     cpp.flags := -DMSW -DNT -DPD_LONGINTTYPE=__int64
     arch.c.flags := -march=core2 -msse -msse2 -msse3 -mfpmath=sse
@@ -660,18 +671,33 @@ ifeq ($(system), Windows)
   endif
   extension = dll
   c.flags :=
+ifdef WSL_DISTRO_NAME
   c.ldflags := -static-libgcc -shared \
     -Wl,--enable-auto-import $(PDBINDIR)/pd.dll
+else
+  c.ldflags := -static-libgcc -shared \
+    -Wl,--enable-auto-import "$(PDBINDIR)/pd.dll"
+endif
   c.ldlibs :=
   cxx.flags := -fcheck-new
+ifdef WSL_DISTRO_NAME
   cxx.ldflags := -static-libgcc -static-libstdc++ -shared \
     -Wl,--enable-auto-import $(PDBINDIR)/pd.dll
+else
+  cxx.ldflags := -static-libgcc -static-libstdc++ -shared \
+    -Wl,--enable-auto-import "$(PDBINDIR)/pd.dll"
+endif
   cxx.ldlibs :=
   shared.extension = dll
+ifdef WSL_DISTRO_NAME
   shared.ldflags := -static-libgcc -shared $(PDBINDIR)/pd.dll
+else
+  shared.ldflags := -static-libgcc -shared "$(PDBINDIR)/pd.dll"
+endif
   stripflags = --strip-all
 
 endif
+
 
 #=== paths =====================================================================
 
@@ -681,26 +707,24 @@ endif
 # environment. Variable 'objectsdir' is supported for compatibility with
 # the build system that pd-l2ork has inherited from pd-extended.
 
-$(info ++++ info: PDDIR : $(PDDIR))
 $(info ++++ info: PDINCLUDEDIR : $(PDINCLUDEDIR))
-$(info ++++ info: PDBINDIR : $(PDBINDIR))
-$(info ++++ info: PDLIBDIR : $(PDLIBDIR))
-
 PDINCLUDEDIR ?= $(pdincludepath)
 PDLIBDIR ?= $(firstword $(objectsdir) $(pkglibdir))
 
-uname := $(shell uname)
-$(info ++++ info: uname : $(uname))
-ifeq ($(filter MINGW% MSYS%, $(uname)), $(uname)) 
-  ifdef PDDIR
-    PDINCLUDEDIR ?= $(wildcard $(PDDIR)/src)
-  endif
-endif
-
-$(info ++++ info: PDDIR : $(PDDIR))
 $(info ++++ info: PDINCLUDEDIR : $(PDINCLUDEDIR))
-$(info ++++ info: PDBINDIR : $(PDBINDIR))
-$(info ++++ info: PDLIBDIR : $(PDLIBDIR))
+ifdef WSL_DISTRO_NAME
+# ifeq ($(filter MINGW% MSYS%, $(uname)), $(uname)) 
+#   ifdef PDDIR
+#     PDINCLUDEDIR ?= $(wildcard $(PDDIR)/src)
+#   endif
+# endif
+else
+ifdef PDDIR
+  PDINCLUDEDIR := $(wildcard $(PDDIR)/src)
+  PDBINDIR := $(wildcard $(PDDIR)/bin)
+endif
+endif
+$(info ++++ info: PDINCLUDEDIR : $(PDINCLUDEDIR))
 
 # base path where all components of the lib will be installed by default
 installpath := $(DESTDIR)$(PDLIBDIR)/$(lib.name)
@@ -730,7 +754,11 @@ endif
 CFLAGS = $(warn.flags) $(optimization.flags) $(arch.c.flags)
 
 # preprocessor flags
+ifdef WSL_DISTRO_NAME
 cpp.flags := -DPD -I $(PDINCLUDEDIR) $(cpp.flags) $(CPPFLAGS)
+else
+cpp.flags := -DPD -I "$(PDINCLUDEDIR)" $(cpp.flags) $(CPPFLAGS)
+endif
 
 # flags for dependency checking (cflags from makefile may define -I options)
 depcheck.flags := $(cpp.flags) $(cflags)
@@ -786,6 +814,7 @@ else
   goals := all
 endif
 
+# Debug string check
 $(info ++++ info: PDDIR : $(PDDIR))
 $(info ++++ info: PDINCLUDEDIR : $(PDINCLUDEDIR))
 $(info ++++ info: PDBINDIR : $(PDBINDIR))
@@ -793,12 +822,20 @@ $(info ++++ info: PDLIBDIR : $(PDLIBDIR))
 
 # store path to Pd API m_pd.h if it is found
 ifdef PDINCLUDEDIR
+ifdef WSL_DISTRO_NAME
   mpdh := $(shell ls $(PDINCLUDEDIR)/m_pd.h)
+else
+  mpdh := $(shell ls "$(PDINCLUDEDIR)/m_pd.h")
+endif
 endif
 
 # store path to pd.dll; if not found, ls will give a useful error
 ifeq ($(system), Windows)
+ifdef WSL_DISTRO_NAME
   pddll := $(shell ls $(PDBINDIR)/pd.dll)
+else
+  pddll := $(shell ls "$(PDBINDIR)/pd.dll")
+endif
 endif
 
 # print Makefile.pdlibbuilder version
